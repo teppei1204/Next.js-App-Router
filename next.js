@@ -141,3 +141,125 @@
     ```
   - **N + 1データフェッチ** に注意
 
+
+  # キャッシュ
+
+  ## ・そもそもキャッシュって？
+  - データを一時的に保存し再度取り出しやすくすること
+    - 例: 図書館
+      - よく貸し出される人気の本
+      - 書物の奥底ではなく、フロント近くの本棚に置いておく
+      - すぐに本が提供できて便利
+  
+  ## ・Request Memoization
+  - 同じリクエストは「重複排除」される（重なったリクエストに関しては一つにまとめる）
+    - 注意:
+      - URLやオプションが少しでも違うとメモ化されない
+      - `fetch()`を使う場合は関数化しておくと良い
+        - データ取得層 = **DAL (Data Access Layer)** に分離しておく
+      - ただデータ取得を関数化しておくこと
+  
+  - ServerComponentで `fetch()` を使う場合のみ適用
+    - ORM等で作った関数はメモ化されない
+    - RouteHandler(API)内での利用では適用されない
+    - `fetch` 以外なら React cache を利用
+  
+  - コンポーネント最下層で `fetch` しても問題ない
+    - 動的メタデータ設定の際などに効果を発揮する
+      - `generateMetadata()`
+      - 同じ `fetch` リクエストしても重複排除される
+    - キャッシュ期間:
+      - 永続的ではない
+      - `fetch` リクエスト毎
+  
+  ## ・Data Cache
+  - アプリ全体に関わるキャッシュ
+    - 理解しておかないと意図しないデータが返ってくる
+  - `fetch()` で **Data Cache** 設定できる
+    - `fetch("https://...", {cache: "force-cache"})`
+    - `fetch("https://...", {cache: "no-store"})`
+    - `fetch("https://...", {cache: {next: {revalidate: 3600}}})`
+    - **SSG/SSR/ISR** が関係する
+  
+  - キャッシュ期間:
+    - 永続的
+    - サーバーを再起動/際ビルドしても **Data Cache** は残る
+    - 最新のデータを返したい場合:
+      - SSRにする
+      - `no-store` を `fetch` で指定する
+      - v15ではデフォルトで `no-store`
+      - Route Segment Configを指定する: `export const dynamic = 'force-dynamic'`
+    - **Data Cache** の再検証を設けることも可能
+      - `revalidate` // 日本語で再検証
+  
+  ## ・Full Route Cache
+  - ページ全体のキャッシュ
+    - 静的なHTMLやRSC Payloadをキャッシュする
+    - `fetch()` ここのキャッシュではない
+    - **Data Cache** は `fetch` で返ってきた JSON をキャッシュしている
+  
+  - Static Renderingのみ適用:
+    - **SSG/ISR時のみ**
+    - **SSRの場合はキャッシュされない**
+    - **AppRouter** は StaticRendering を推奨
+      - **Full Route Cache** でページ全体を自動キャッシュ
+      - 純粋に早いから
+      - 意図しない DynamicRendering に注意
+        - `cookies()` / `Headers()`
+        - **dynamic function**
+        - 自動で Dynamic Rendering になる
+  
+  - キャッシュ期間:
+    - 永続的
+    - ユーザー間を超えてキャッシュを共有される
+    - 指定時には慎重に
+  
+  ## ・Router Cache
+  - ナビゲーション用のキャッシュ
+    - ページを訪問すると RSC ペイロードが自動キャッシュされる
+      - すぐに戻る/進むナビゲーションができる
+      - UXの向上
+    - クライアント側でメモリ内にキャッシュされる
+  
+  ### ・<Link/>
+  - 静的ページ:
+    - `prefetch` はデフォルトで **true**
+    - バックグラウンドでプリロードされている
+      - 事前ページ読み込み
+      - リンクを押した瞬間にページ遷移可能に
+    - **production** のみ有効
+  
+  - 動的ページ:
+    - 共通レイアウト（動的以外の部分）は `prefetch` されている
+    - 動的な部分は `loading.js` でローディング UI の表示
+      - ロード UI とストリーミング:
+        - `loading.js`
+        - `<Suspense />`
+      - ストリーミングについては後述
+  
+  - キャッシュを無効にしたい時は:
+    - **ServerActions** で
+      - `revalidatePath` / `revalidateTag`
+      - `cookies.set` / `cookies.delete`
+    - `router.refresh`
+  
+  - キャッシュ期間:
+    - セッション中のみ = ブラウザのタブが閉じるまで
+    - 静的ページ:
+      - デフォルトで **5分間**
+    - 動的ページ:
+      - デフォルトで **30秒**
+    - **staleTimes**
+      - 詳細に時間決定ができる
+  
+  ## ・ベストプラクティス
+  - キャッシュの挙動をちゃんと理解しよう
+    - 予期しないキャッシュが発生しなければ OK
+    - キャッシュすべき箇所も把握できれば最高
+    - ドキュメントから最新情報を知ると尚良い
+  
+  - キャッシュをもっと制御したい場合:
+    - **Remix** 等を利用する
+    - WebAPI 標準に準拠している
+    - キャッシュの詳細なカスタマイズが可能
+  
